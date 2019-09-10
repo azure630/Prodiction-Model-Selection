@@ -1,0 +1,164 @@
+###8
+examcb = read.csv("examcb.csv")
+head(examcb)
+par(mfrow=c(1,1))
+#logit
+set.seed(12345)
+train = runif(nrow(examcb))<.5
+fit = glm(y~., binomial(link=logit), examcb)
+summary(fit)
+phat = predict(fit, examcb, type = c("response"))
+phat
+install.packages("pROC")
+library(pROC)
+roc = roc(y~phat, examcb)
+auc(roc)
+roc1=plot.roc(examcb$y, fit$fitted.values)
+auc(roc1) #0.56
+
+#tree
+library(tree)
+fit.tree = tree(factor(y)~., data=examcb[train,],  mindev=0.001,method = 'class' )
+fit.tree
+summary(fit.tree)
+plot(prune, type="uniform")
+text(fit.tree)
+prune = prune.tree(fit.tree, best = 11)
+plot(cv.tree(fit.tree))
+summary(prune)
+
+####prediction
+PredictionWithClass = predict(fit.tree, examcb, type="class")
+PredictionWithProb = predict(prune, examcb, type="vector")
+####accuracy matrix
+tab = table(predictions = PredictionWithClass, actual = examcb$y)
+tab
+sum(diag(tab))/sum(tab) #classification rate 0.533
+auc=auc(examcb$y, PredictionWithProb[,2]) 
+auc #0.9993
+cv_tree = cv.tree(fit.tree, FUN=prune.misclass)
+names(cv_tree)
+plot(cv_tree$size, cv_tree$dev, type = "b")
+pruned_model = prune.misclass(fit.tree, best = 18)
+pruned_model
+plot(pruned_model, type = "uniform")
+text(pruned_model)
+PredictionWithClass = predict(pruned_model, examcb, type="class")
+PredictionWithProb = predict(pruned_model, examcb, type="vector")
+auc=auc(examcb$y, PredictionWithProb[,2]) 
+auc
+
+###another way of tree: rpart
+library(rpart)
+fit = rpart(y~.,method = "class", data = examcb)
+plotcp(fit)
+# plot tree 
+plot(fit, uniform=TRUE, 
+     main="Classification Tree for Kyphosis")
+text(fit, use.n=TRUE, all=TRUE, cex=.8)
+printcp(fit)
+plotcp(fit)
+# prune the tree
+pfit = prune(fit, cp=fit$cptable[which.min(fit$cptable[,"xerror"]),"CP"])
+summary(pfit)
+pfit
+plot(pfit, uniform=TRUE, 
+     main="Pruned Classification Tree for Kyphosis")
+text(pfit, use.n=TRUE, all=TRUE, cex=.8)
+
+##RF
+library(randomForest)
+fit.rf = randomForest(as.factor(y)~., examcb,ntree=1000,keep.forest=T )
+fit.rf #misclassification rate: 0%
+fit.rf$votes[,2]
+auc(examcb$y, fit.rf$votes[,2]) #0.9885
+
+##GBM
+fit.gbm = gbm(y~.,n.trees = 1000, data=examcb)
+phat = predict(fit.gbm, examcb, n.trees=1000, type="response")
+auc(examcb$y, phat) #0.7834
+fit.gbm = gbm(y~.,n.trees = 1000, data=examcb, interaction.depth = 3)
+phat = predict(fit.gbm, examcb, n.trees=1000, type="response")
+auc(examcb$y, phat) #0.9907
+fit.gbm = gbm(y~.,n.trees = 1000, data=examcb, shrinkage = 0.01)
+phat = predict(fit.gbm, examcb, n.trees=1000, type="response")
+auc(examcb$y, phat) #0.8272
+
+fit.gbm = gbm(y~.,n.trees = 10000, data=examcb)
+phat = predict(fit.gbm, examcb, n.trees=10000, type="response")
+auc(examcb$y, phat) #0.9707
+fit.gbm = gbm(y~.,n.trees = 10000, data=examcb, interaction.depth = 2)
+phat = predict(fit.gbm, examcb, n.trees=10000, type="response")
+auc(examcb$y, phat) #1
+
+fit.gbm = gbm(y~.,n.trees = 5000, data=examcb, interaction.depth = 2)
+phat = predict(fit.gbm, examcb, n.trees=5000, type="response")
+auc(examcb$y, phat)  #0.9183
+
+
+fit.gbm = gbm(y~.,n.trees = 1000, data=examcb[train,], interaction.depth = 3)
+phat = predict(fit.gbm, examcb, n.trees=1000, type="response")
+auc(examcb$y, phat) 
+mean((examcb$y[!examcb$train] - phat)^2)
+
+
+
+####4
+library(MASS)
+summary(UScereal)
+head(UScereal)
+cereal = UScereal[,-1]
+head(cereal)
+cor(UScereal[,c(2:8,10)])
+hist(UScereal$protein)
+plot(1:8, fit$values, type="b")
+fit.pca = prcomp(UScereal[,c(2:8,10)], scale = T)
+fit.pca$values
+plot(fit.pca)
+
+#eigen value
+ev <- fit.pca$sdev^2
+ev
+evplot <- function(ev)
+{
+  # Broken stick model (MacArthur 1957)
+  n <- length(ev)
+  bsm <- data.frame(j=seq(1:n), p=0)
+  bsm$p[1] <- 1/n
+  for (i in 2:n) bsm$p[i] <- bsm$p[i-1] + (1/(n + 1 - i))
+  bsm$p <- 100*bsm$p/n
+  # Plot eigenvalues and % of variation for each axis
+  op <- par(mfrow=c(2,1))
+  barplot(ev, main="Eigenvalues", col="bisque", las=2)
+  abline(h=mean(ev), col="red")
+  legend("topright", "Average eigenvalue", lwd=1, col=2, bty="n")
+  barplot(t(cbind(100*ev/sum(ev), bsm$p[n:1])), beside=TRUE, 
+          main="% variation", col=c("bisque",2), las=2)
+  legend("topright", c("% eigenvalue", "Broken stick model"), 
+         pch=15, col=c("bisque",2), bty="n")
+  par(op)
+}
+#interpretation
+fit.pca$rotation
+
+#principal
+library(psych)
+fit.pca1 = principal(UScereal[,c(2:8,10)])
+fit.pca1
+fit.pca1$scores
+var(fit.pca1$scores)
+#log data
+logcereal = UScereal
+for(i in c(2:7, 10)) logcereal[[i]]=log(logcereal[[i]]+1)
+fit.log = principal(logcereal[,c(2:8,10)], nfactor = 2)
+fit.log
+head(UScereal)
+install.packages(ggfortify)
+
+plot(fit.log$scores, pch=16, col=logcereal$shelf)
+text(fit.log$scores,labels = logcereal$shelf, adj=1, cex = 1)
+
+plot(fit.log$scores, pch=16, col=logcereal$mfr)
+text(fit.log$scores,labels = logcereal$mfr, adj=1, cex = 1)
+
+exp(-0.0626)-1

@@ -1,0 +1,46 @@
+gene = read.csv("gene.csv", header = T)
+
+head(gene)
+library(car)
+library(glmnet)
+library(rpart)
+library(dplyr)
+
+gene <- read.csv("gene.csv", header = T)
+str(gene)
+
+# train/test split
+inTrain <- createDataPartition(y = gene$sick, p = 0.75, list = F) #split 
+training <- gene[inTrain, ]
+testing <- gene[-inTrain, ]
+
+# PCA
+princomp_gene <- prcomp(training[, 1:1000])
+princomp_gene$rotation
+std_gene <- princomp_gene$sdev
+pr_var_gene <- std_gene^2
+prop_varexb <- pr_var_gene / sum(pr_var_gene)
+plot(prop_varexb, xlab = "principal component",
+     ylab = "proportion of variance explained",
+     type = "b")
+plot(cumsum(prop_varexb), xlab = "principal component",
+     ylab = "cumulative proportion of variance explained",
+     type = "b")
+
+train_gene <- data.frame(sick = training$sick, princomp_gene$x[, 1:3])
+fit_pca_gene <- lm(sick ~., data = train_gene)
+summary(fit_pca_gene)
+
+####principal scale but prcomp don't scale by default
+head(music)
+music = read.csv("music.csv")
+screeplot(prcomp(music))
+install.packages("psych")
+library(psych)
+fit = factanal(music, factors = 3, score = "reg", rotation = "promax")
+fit
+print(fit$loadings, cutoff = 0.3, digits = 4, sort = TRUE)
+fit$loadings
+fit.p=principal(music)
+round(fit.p$values, 4)
+plot(1:17, fit.p$values, type="b")
